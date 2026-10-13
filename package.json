@@ -1,0 +1,15 @@
+{
+  "name": "voyage-auto-signin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "voyage-site.zeabur.app 每日自动签到（零依赖，Node 18+）",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "signin": "node signin.mjs",
+    "dry": "node signin.mjs --dry-run",
+    "force": "node signin.mjs --force",
+    "discover": "node discover.mjs",
+    "sessions": "node sessions.mjs"
+  }
+}

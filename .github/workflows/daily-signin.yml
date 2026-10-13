@@ -1,0 +1,68 @@
+name: Voyage 每日签到
+
+on:
+  schedule:
+    # UTC = 北京时间 - 8；这里是每天北京时间 09:30
+    - cron: "30 1 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  signin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Actions 每次运行都是干净环境，三个运行时文件都要靠 artifact 续命：
+      #   .auth.json   各账号登录态    —— 丢了就会每天重新登录，
+      #                 而该站每登录一次就在「登录设备」里多堆一条记录
+      #   .site.json   站点级 action id —— 丢了每个账号都要重扫十几个 JS chunk
+      #   state.*.json 各账号签到状态（按账号隔离，共用一份会让后跑的账号漏签）
+      - name: 恢复登录态与状态
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: voyage-state
+          path: .
+
+      - name: 执行签到
+        id: run
+        continue-on-error: true
+        env:
+          # 多账号用竖线分隔： a@x.com::pw1|b@y.com::pw2
+          VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}
+        run: node signin.mjs
+
+      # 重试整批是安全的：已签过的账号会被服务端幂等判据直接跳过
+      - name: 失败重试
+        if: steps.run.outcome == 'failure'
+        id: retry
+        continue-on-error: true
+        env:
+          VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}
+        run: |
+          sleep 300
+          node signin.mjs
+
+      - name: 保存登录态与状态
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voyage-state
+          path: |
+            .auth.json
+            .site.json
+            state.json
+            state.*.json
+          if-no-files-found: warn
+          retention-days: 60
+
+      - name: 标记失败
+        if: steps.run.outcome == 'failure' && steps.retry.outcome == 'failure'
+        run: |
+          echo "仍有账号失败，请看上方汇总表"
+          exit 1

@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+# 含明文密码，绝不能提交
+accounts.txt
+.auth.json
+# 运行时缓存（非密钥，但属于本机状态，不该进仓库）
+.site.json
+state.json
+state.*.json
+account.html
+account.*.html
+dump*.html
+node_modules/
