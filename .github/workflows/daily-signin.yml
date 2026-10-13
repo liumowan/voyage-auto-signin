@@ -33,8 +33,15 @@ jobs:
         id: run
         continue-on-error: true
         env:
-          # 多账号用竖线分隔： a@x.com::pw1|b@y.com::pw2
-          VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}
+          # 账号按槽位拆分：VOYAGE_ACCOUNT_1 … VOYAGE_ACCOUNT_8,每个装一个账号
+          #   值格式  账号::密码[::备注]
+          # 没建的槽位展开成空字符串，解析器自动跳过，所以加账号只需新建
+          # VOYAGE_ACCOUNT_3,不用改这个文件。
+          # 开头的 VOYAGE_ACCOUNTS 是旧的合并值，作过渡兜底：这样 workflow 与
+          #   secret 谁先建都不会让那次运行失败；两者重叠的账号会按账号去重。
+          #   新槽位跑通后，可以直接删掉旧 secret。
+          # 写成单行是刻意的：值里出现换行会破坏脚本的按行解析
+          VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}|${{ secrets.VOYAGE_ACCOUNT_1 }}|${{ secrets.VOYAGE_ACCOUNT_2 }}|${{ secrets.VOYAGE_ACCOUNT_3 }}|${{ secrets.VOYAGE_ACCOUNT_4 }}|${{ secrets.VOYAGE_ACCOUNT_5 }}|${{ secrets.VOYAGE_ACCOUNT_6 }}|${{ secrets.VOYAGE_ACCOUNT_7 }}|${{ secrets.VOYAGE_ACCOUNT_8 }}
         run: node signin.mjs
 
       # 重试整批是安全的：已签过的账号会被服务端幂等判据直接跳过
@@ -43,7 +50,7 @@ jobs:
         id: retry
         continue-on-error: true
         env:
-          VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}
+          VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}|${{ secrets.VOYAGE_ACCOUNT_1 }}|${{ secrets.VOYAGE_ACCOUNT_2 }}|${{ secrets.VOYAGE_ACCOUNT_3 }}|${{ secrets.VOYAGE_ACCOUNT_4 }}|${{ secrets.VOYAGE_ACCOUNT_5 }}|${{ secrets.VOYAGE_ACCOUNT_6 }}|${{ secrets.VOYAGE_ACCOUNT_7 }}|${{ secrets.VOYAGE_ACCOUNT_8 }}
         run: |
           sleep 300
           node signin.mjs
