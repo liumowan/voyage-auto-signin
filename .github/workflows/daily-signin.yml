@@ -14,7 +14,8 @@ on:
 jobs:
   signin:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 预算：抖动 ≤6min + 首跑 + 重试等待 ≤8min + 重试跑，放宽到 25min
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +35,20 @@ jobs:
           name: voyage-state
           path: .
 
+      # 随机抖动：实际签到时间 = 计划时刻 ±3 分钟。
+      # 基准用 github.run_started_at（scheduled 触发时≈cron 时刻），
+      # 这样 checkout/setup 耗掉的时间被算进去，请求落点仍在窗口内。
+      # 手动 Run workflow 时跳过抖动，立即执行，方便调试。
+      - name: 随机抖动（±3 分钟）
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          START=$(date -u -d "${{ github.run_started_at }}" +%s)
+          NOW=$(date -u +%s)
+          OFFSET=$(( (RANDOM % 361) - 180 ))
+          WAIT=$(( START + OFFSET - NOW ))
+          echo "计划时刻 + ${OFFSET}s 偏移；当前需等待 ${WAIT}s（负数=已过窗口，立即执行）"
+          if [ "$WAIT" -gt 0 ]; then sleep "$WAIT"; fi
+
       - name: 执行签到
         id: run
         continue-on-error: true
@@ -49,7 +64,8 @@ jobs:
           VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}|${{ secrets.VOYAGE_ACCOUNT_1 }}|${{ secrets.VOYAGE_ACCOUNT_2 }}|${{ secrets.VOYAGE_ACCOUNT_3 }}|${{ secrets.VOYAGE_ACCOUNT_4 }}|${{ secrets.VOYAGE_ACCOUNT_5 }}|${{ secrets.VOYAGE_ACCOUNT_6 }}|${{ secrets.VOYAGE_ACCOUNT_7 }}|${{ secrets.VOYAGE_ACCOUNT_8 }}
         run: node signin.mjs
 
-      # 重试整批是安全的：已签过的账号会被服务端幂等判据直接跳过
+      # 重试整批是安全的：已签过的账号会被服务端幂等判据直接跳过。
+      # 间隔同样 ±3 分钟随机，避免每次都在固定秒数后出现第二次请求。
       - name: 失败重试
         if: steps.run.outcome == 'failure'
         id: retry
@@ -57,7 +73,10 @@ jobs:
         env:
           VOYAGE_ACCOUNTS: ${{ secrets.VOYAGE_ACCOUNTS }}|${{ secrets.VOYAGE_ACCOUNT_1 }}|${{ secrets.VOYAGE_ACCOUNT_2 }}|${{ secrets.VOYAGE_ACCOUNT_3 }}|${{ secrets.VOYAGE_ACCOUNT_4 }}|${{ secrets.VOYAGE_ACCOUNT_5 }}|${{ secrets.VOYAGE_ACCOUNT_6 }}|${{ secrets.VOYAGE_ACCOUNT_7 }}|${{ secrets.VOYAGE_ACCOUNT_8 }}
         run: |
-          sleep 300
+          OFFSET=$(( (RANDOM % 361) - 180 ))
+          WAIT=$(( 300 + OFFSET ))
+          echo "重试前等待 ${WAIT}s（300s ± 3min）"
+          sleep "$WAIT"
           node signin.mjs
 
       - name: 保存登录态与状态
