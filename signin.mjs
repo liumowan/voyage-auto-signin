@@ -93,6 +93,13 @@ async function ensureAuth(tag, c, acc) {
     } else if (!s.certain) {
       // 站点抖动会返回读不到的空响应。只有明确 signedIn:false 才算过期，
       // 否则白白重登一次、给对方后台多堆一条登录设备记录。
+      // 但如果已经确认站点账户服务宕机，就别再假装“已登录”往下走 ——
+      // 后面读 /account 只会得到一句含糊的 fetch failed。
+      if (c.serviceDown) {
+        const e = new Error("站点账户服务暂时不可用，本次跳过（不是脚本问题）");
+        e.code = "SERVICE_DOWN";
+        throw e;
+      }
       if (cached.account && !sameAccount(cached.account, acc.account)) {
         log(tag, `缓存账号(${cached.account})与 ${acc.account} 不符且无法确认登录态，丢弃重登`);
         c.jar.clear();
@@ -147,7 +154,15 @@ async function ensureAuth(tag, c, acc) {
 async function readSignIn(tag, c, attempts = 4) {
   let lastText = null;
   for (let i = 1; i <= attempts; i++) {
-    const r = await c.get("/account");
+    let r;
+    try {
+      r = await c.get("/account");
+    } catch (e) {
+      // 裸 fetch 失败（DNS/连接被重置/超时）在这里转成人话，别让汇总表只印 "fetch failed"
+      const err = new Error(`请求 /account 失败：${e.message}${c.serviceDown ? "（站点账户服务此前已不可用）" : ""}`);
+      err.code = "NETWORK";
+      throw err;
+    }
     if (/\/login/.test(r.finalUrl)) {
       const e = new Error("/account 被踢回登录页，登录态已失效");
       e.code = "NOT_LOGGED_IN";

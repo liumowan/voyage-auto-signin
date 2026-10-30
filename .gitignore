@@ -12,3 +12,5 @@ account.html
 account.*.html
 dump*.html
 node_modules/
+# 备份文件常含凭据，别让 git add -A 带进来
+*.bak
